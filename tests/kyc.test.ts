@@ -222,3 +222,18 @@ describe('SSNs never leave the server unmasked', () => {
     expect(log[0].after.ssn).toBe('•••-••-••••');
   });
 });
+
+describe('home', () => {
+  it('counts what each person can act on and spotlights it', async () => {
+    const { as } = setup();
+    const actionable = async (user: string) =>
+      ((await as(user).get('/apps/kyc/cases')).body.rows as Array<{ actions: { approve: { allowed: boolean } } }>).filter((r) => r.actions.approve.allowed).length;
+    const people = [APPROVER, APPROVER_2, OPERATOR, OBSERVER];
+    const counts = await Promise.all(people.map(actionable));
+    // Open: 1001 (high), 1002, 1003 (Priya's), 1004 (Maya's), 1009 (Samuel's), 1005 (waiting, Priya's).
+    expect(counts).toEqual([4, 5, 4, 0]);
+    const homes = await Promise.all(people.map(async (p) => (await as(p).get('/home')).body));
+    expect(homes.map((h) => h.waitingOnYou)).toEqual(counts);
+    expect(homes[0].spotlight).toMatchObject({ app: 'kyc', reason: 'waiting_on_you' });
+  });
+});

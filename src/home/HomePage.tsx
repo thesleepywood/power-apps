@@ -14,8 +14,8 @@ const PAGE = 12;
 
 const SPOTLIGHT_TITLE: Record<Spotlight['reason'], string> = {
   waiting_on_you: 'Up next for you',
-  yours: 'Your open request',
-  oldest: 'Oldest open request',
+  yours: 'Opened by you',
+  oldest: 'Oldest open record',
 };
 
 function Stat({ icon, label, value, hint }: { icon: ReactNode; label: string; value: number | undefined; hint: string }) {
@@ -127,7 +127,7 @@ export function HomePage() {
             value={home.data?.waitingOnYou}
             hint={user.role === 'observer' ? 'Observers have read-only access' : 'Records you can decide right now'}
           />
-          <Stat icon={<ListChecks size={18} />} label="Your open requests" value={home.data?.yourOpenRequests} hint="Opened by you, still pending" />
+          <Stat icon={<ListChecks size={18} />} label="Opened by you" value={home.data?.yourOpenRequests} hint="Still open" />
           <Stat icon={<ScrollText size={18} />} label="Changes, last 24 hours" value={home.data?.changesLast24h} hint="Across every app" />
         </div>
       </div>

@@ -24,13 +24,6 @@ export const APPS: AppDefinition[] = [
     description: 'Your day at a glance and the full record of every change.',
   },
   {
-    id: 'approvals',
-    name: 'Approvals',
-    route: '/approvals',
-    icon: 'stamp',
-    description: 'Requests waiting for an Approver to sign off.',
-  },
-  {
     id: 'kyc',
     name: 'KYC Review Queue',
     route: '/kyc',

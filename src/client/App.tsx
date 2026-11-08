@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
-import { ApprovalDetailRoute, ApprovalsListPage } from '../approvals/client/ApprovalsListPage';
 import { KycCaseRoute, KycQueuePage } from '../kyc/client/KycQueuePage';
 import { AppShell } from '../foundation/client/AppShell';
 import { SessionProvider, useSession } from '../foundation/client/session';
@@ -36,8 +35,6 @@ export function App() {
               }
             >
               <Route index element={<HomePage />} />
-              <Route path="approvals" element={<ApprovalsListPage />} />
-              <Route path="approvals/:id" element={<ApprovalDetailRoute />} />
               <Route path="kyc" element={<KycQueuePage />} />
               <Route path="kyc/:id" element={<KycCaseRoute />} />
               <Route path="*" element={<NotFound />} />

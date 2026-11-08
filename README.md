@@ -1,6 +1,6 @@
 # Keel — internal tools foundation
 
-A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page**, a sample **Approvals** app and the **KYC Review Queue**. The Refunds Dashboard comes later as its own app on top of the same foundation (see `docs/spec.md`).
+A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page** and the **KYC Review Queue**. The Refunds Dashboard comes later as its own app on top of the same foundation (see `docs/spec.md`).
 
 Everything is in memory: no real sign-in, no database, no external services. Restart the server and all data goes back to the seed state.
 
@@ -21,13 +21,12 @@ Set `PORT` to use a different port. `npm run build` makes a production bundle in
 1. **Sign in** — choose a person. No password. There are 2 Operators, 2 Approvers and 1 Observer:
    | Person | Role |
    | --- | --- |
-   | Maya Chen, Diego Alvarez | Operator: does the daily work, opens requests |
-   | Priya Natarajan, Samuel Okafor | Approver: signs off on requests |
+   | Maya Chen, Diego Alvarez | Operator: does the daily work |
+   | Priya Natarajan, Samuel Okafor | Approver: signs off on anything that needs it |
    | Grace Liu | Observer: read-only |
    Use the person picker at the bottom of the sidebar to switch at any time.
 2. **Home** — greets you by first name and lists what your role can and can't do. Shows app cards with live open counts, the record that most needs you (with its masked SSN, change history and gated Approve/Reject actions), and the **Full record**: every change across all apps, newest first. Click a row to open that record.
-3. **Approvals** — the sample app that uses the foundation: open a sign-off request, then approve, reject or withdraw it. Denied actions stay visible with the server's reason, e.g. *Approvers only*, *Observers have read-only access*, *You can't approve your own request*.
-4. **KYC Review Queue** — 10 fictional identity-check cases (2 high-risk). The queue shows name, masked SSN, risk, status and opened date; a case page shows the review reason, summary, change history and Approve/Reject.
+3. **KYC Review Queue** — 10 fictional identity-check cases (2 high-risk). The queue shows name, masked SSN, risk, status and opened date; a case page shows the review reason, summary, change history and Approve/Reject.
    - Low-risk: an Operator or Approver approves or rejects it.
    - High-risk: approving sends it to **Waiting for approver**. From there only an Approver can approve or reject it, and not the person who sent it on. While it's still pending, an Operator or Approver can reject it.
    - Nobody can decide a case they opened.
@@ -50,7 +49,7 @@ How it fits together:
 - The client sends the chosen person in an `x-keel-user` header. That is the only "auth" (demo only).
 - Every change goes through `Foundation.change()`. It applies the change and writes exactly one change-log entry. If the change is refused or throws, nothing is stored and nothing is logged.
 - The server checks permissions on every request and returns `{ error: { code, message } }` when it says no. Record responses also include an `actions` object (`{ allowed, reason }` for each action), so the UI only displays the server's decision and never makes its own.
-- SSNs are masked before any response leaves the server: Operators and Approvers see the last 4 digits, Observers see none. Change-log snapshots store only the fully masked value, and SSN-shaped numbers typed into titles, reasons or notes are masked before they are saved.
+- SSNs are masked before any response leaves the server: Operators and Approvers see the last 4 digits, Observers see none. Change-log snapshots store only the fully masked value, and SSN-shaped numbers typed into notes are masked before they are saved.
 
 ## API
 
@@ -61,9 +60,6 @@ How it fits together:
 | GET | `/api/apps` | Registry apps with open counts |
 | GET | `/api/home` | Home summary and spotlight record |
 | GET | `/api/changes?app=&recordId=` | Change log, newest first |
-| GET/POST | `/api/apps/approvals/requests` | List / open a request |
-| GET | `/api/apps/approvals/requests/:id` | One request (masked) |
-| POST | `/api/apps/approvals/requests/:id/{approve,reject,withdraw}` | Decide / withdraw |
 | GET | `/api/apps/kyc/cases` | KYC queue (masked) |
 | GET | `/api/apps/kyc/cases/:id` | One case (masked), with `actions` |
 | POST | `/api/apps/kyc/cases/:id/{approve,reject}` | Approve (sends high-risk to an Approver) / reject (note required) |
@@ -81,7 +77,7 @@ How it fits together:
 - `tests/permissions.test.ts`: server-side role checks and the reasons returned
 - `tests/masking.test.ts`: masking helpers; checks that no raw SSN appears in any API response or the change log, even when one is typed into free text
 - `tests/changeLog.test.ts`: exactly one entry per change, none for refused changes, entries can't be modified, newest first
-- `tests/approvals.test.ts`: no self-approval or self-rejection (in the primitive and over HTTP), withdraw rules, escalation primitive
+- `tests/approvals.test.ts`: the approvals primitive: no self-approval or self-rejection, withdraw rules, escalation
 - `tests/kyc.test.ts`: high-risk escalation, Approver-only decisions once waiting, Operators decide low-risk, no self-approval at any step, no raw SSN in any response or the change log, one log entry per change
 - `tests/ui.test.tsx`: denied actions show their reason, status badges
 - `tests/session.test.tsx`: after switching person, the previous person's data is never shown

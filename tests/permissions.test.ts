@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { canChange, requireRole } from '../src/foundation/server/permissions';
 import { findUser } from '../src/foundation/shared/users';
-import { APPROVER, APPROVER_2, NEW_REQUEST, OBSERVER, OPERATOR, PENDING_BY_OPERATOR, setup } from './helpers';
+import { APPROVER, APPROVER_2, KYC_HIGH_WAITING, KYC_LOW_BY_APPROVER, KYC_LOW_BY_OPERATOR_2, OBSERVER, OPERATOR, setup } from './helpers';
 
 const u = (id: string) => findUser(id)!;
+const casePath = (id: string, action?: string) => `/apps/kyc/cases/${id}${action ? `/${action}` : ''}`;
 
 describe('requireRole', () => {
   it('allows listed roles and explains denials in plain words', () => {
@@ -30,12 +31,8 @@ describe('server-side enforcement over HTTP', () => {
 
   it('blocks Observers from every mutation with a reason', async () => {
     const { as } = setup();
-    const create = await as(OBSERVER).post('/apps/approvals/requests', NEW_REQUEST);
-    expect(create.status).toBe(403);
-    expect(create.body.error.message).toBe('Observers have read-only access');
-
-    for (const action of ['approve', 'reject', 'withdraw']) {
-      const res = await as(OBSERVER).post(`/apps/approvals/requests/${PENDING_BY_OPERATOR}/${action}`, { note: 'x' });
+    for (const action of ['approve', 'reject']) {
+      const res = await as(OBSERVER).post(casePath(KYC_LOW_BY_OPERATOR_2, action), { note: 'x' });
       expect(res.status, action).toBe(403);
       expect(res.body.error.message, action).toBe('Observers have read-only access');
     }
@@ -43,16 +40,16 @@ describe('server-side enforcement over HTTP', () => {
 
   it('blocks Operators from signing off: "Approvers only"', async () => {
     const { as } = setup();
-    const res = await as(OPERATOR).post('/apps/approvals/requests/APR-1005/approve');
+    const res = await as(OPERATOR).post(casePath(KYC_HIGH_WAITING, 'approve'));
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: { code: 'role', message: 'Approvers only' } });
-    const after = await as(OPERATOR).get('/apps/approvals/requests/APR-1005');
-    expect(after.body.status).toBe('pending');
+    const after = await as(OPERATOR).get(casePath(KYC_HIGH_WAITING));
+    expect(after.body.status).toBe('waiting');
   });
 
-  it('lets an Approver sign off on someone else’s request', async () => {
+  it('lets an Approver sign off on someone else’s record', async () => {
     const { as } = setup();
-    const res = await as(APPROVER_2).post(`/apps/approvals/requests/${PENDING_BY_OPERATOR}/approve`, { note: 'ok' });
+    const res = await as(APPROVER_2).post(casePath(KYC_HIGH_WAITING, 'approve'), { note: 'ok' });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('approved');
     expect(res.body.decidedBy.id).toBe(APPROVER_2);
@@ -60,31 +57,30 @@ describe('server-side enforcement over HTTP', () => {
 
   it('sends the server’s decision for each action so the UI can explain it', async () => {
     const { as } = setup();
-    const op = (await as(OPERATOR).get(`/apps/approvals/requests/${PENDING_BY_OPERATOR}`)).body;
+    const op = (await as(OPERATOR).get(casePath(KYC_HIGH_WAITING))).body;
     expect(op.actions.approve).toEqual({ allowed: false, code: 'role', reason: 'Approvers only' });
-    expect(op.actions.withdraw).toEqual({ allowed: true });
 
-    const obs = (await as(OBSERVER).get('/apps/approvals/requests')).body;
-    expect(obs.canCreate).toMatchObject({ allowed: false, reason: 'Observers have read-only access' });
+    const obs = (await as(OBSERVER).get('/apps/kyc/cases')).body.rows as Array<{ actions: { approve: object; reject: object } }>;
+    for (const row of obs) {
+      expect(row.actions.approve).toMatchObject({ allowed: false, reason: 'Observers have read-only access' });
+      expect(row.actions.reject).toMatchObject({ allowed: false, reason: 'Observers have read-only access' });
+    }
 
-    const appr = (await as(APPROVER).get(`/apps/approvals/requests/${PENDING_BY_OPERATOR}`)).body;
-    expect(appr.actions.approve).toEqual({ allowed: true });
-    expect(appr.actions.withdraw).toMatchObject({ allowed: false, reason: 'Only the person who opened it can withdraw' });
+    const own = (await as(APPROVER).get(casePath(KYC_LOW_BY_APPROVER))).body;
+    expect(own.actions.approve).toEqual({ allowed: false, code: 'self_approval', reason: "You can't approve your own request" });
+    expect((await as(APPROVER).get(casePath(KYC_HIGH_WAITING))).body.actions.approve).toMatchObject({ allowed: false, code: 'self_approval' });
+    expect((await as(APPROVER_2).get(casePath(KYC_HIGH_WAITING))).body.actions.approve).toEqual({ allowed: true });
   });
 
   it('validates input on the server', async () => {
     const { as } = setup();
-    const res = await as(OPERATOR).post('/apps/approvals/requests', { ...NEW_REQUEST, customerSsn: '12' });
+    const res = await as(OPERATOR).post(casePath(KYC_LOW_BY_OPERATOR_2, 'reject'), { note: '   ' });
     expect(res.status).toBe(400);
-    expect(res.body.error.message).toMatch(/SSN/);
+    expect(res.body.error.message).toMatch(/note/);
   });
-});
 
-describe('amount validation', () => {
-  it('rejects amounts that round to $0.00', async () => {
+  it('returns 404 for an unknown record', async () => {
     const { as } = setup();
-    const res = await as(OPERATOR).post('/apps/approvals/requests').send({ ...NEW_REQUEST, amount: 0.004 });
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toBe('Amount must be at least $0.01.');
+    expect((await as(APPROVER).get(casePath('KYC-9999'))).status).toBe(404);
   });
 });

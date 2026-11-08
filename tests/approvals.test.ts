@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { canDecide, canEscalate, canWithdraw, decide, escalate, type Approvable } from '../src/foundation/server/approvals';
+import { canDecide, canEscalate, canWithdraw, decide, escalate, withdraw, type Approvable } from '../src/foundation/server/approvals';
 import type { Role } from '../src/foundation/shared/roles';
 import { Foundation } from '../src/foundation/server/foundation';
 import { findUser } from '../src/foundation/shared/users';
-import { APPROVED, APPROVER, APPROVER_2, NEW_REQUEST, NOW, OBSERVER, OPERATOR, OPERATOR_2, PENDING_BY_APPROVER, setup } from './helpers';
+import { APPROVER, APPROVER_2, NOW, OBSERVER, OPERATOR, OPERATOR_2 } from './helpers';
 
 const u = (id: string) => findUser(id)!;
 const req = (requestedBy: string, status: Approvable['status'] = 'pending'): Approvable => ({ id: 'r1', status, requestedBy, requestedAt: NOW.toISOString() });
@@ -40,56 +40,16 @@ describe('no self-approval (primitive)', () => {
     expect(canWithdraw(u(OPERATOR), req(OPERATOR))).toEqual({ allowed: true });
     expect(canWithdraw(u(APPROVER), req(OPERATOR))).toMatchObject({ code: 'not_requester' });
   });
-});
 
-describe('no self-approval (HTTP)', () => {
-  it('an Approver cannot approve or reject a request they opened', async () => {
-    const { as } = setup();
-    const approve = await as(APPROVER).post(`/apps/approvals/requests/${PENDING_BY_APPROVER}/approve`);
-    expect(approve.status).toBe(403);
-    expect(approve.body.error).toEqual({ code: 'self_approval', message: "You can't approve your own request" });
-    const reject = await as(APPROVER).post(`/apps/approvals/requests/${PENDING_BY_APPROVER}/reject`, { note: 'hmm' });
-    expect(reject.status).toBe(403);
-    expect(reject.body.error.code).toBe('self_approval');
-  });
-
-  it('the detail view tells the requester why', async () => {
-    const { as } = setup();
-    const res = await as(APPROVER).get(`/apps/approvals/requests/${PENDING_BY_APPROVER}`);
-    expect(res.body.actions.approve).toMatchObject({ allowed: false, reason: "You can't approve your own request" });
-  });
-
-  it('a request an Approver just opened cannot be approved by them, but can by another Approver', async () => {
-    const { as } = setup();
-    const created = await as(APPROVER_2).post('/apps/approvals/requests', NEW_REQUEST);
-    expect((await as(APPROVER_2).post(`/apps/approvals/requests/${created.body.id}/approve`)).status).toBe(403);
-    const ok = await as(APPROVER).post(`/apps/approvals/requests/${created.body.id}/approve`);
-    expect(ok.status).toBe(200);
-    expect(ok.body.status).toBe('approved');
-  });
-
-  it('a decided request cannot be decided again', async () => {
-    const { as } = setup();
-    const res = await as(APPROVER_2).post(`/apps/approvals/requests/${APPROVED}/reject`, { note: 'changed my mind' });
-    expect(res.status).toBe(403);
-    expect(res.body.error.message).toBe('This request is already approved');
-  });
-
-  it('home counts what each person can act on', async () => {
-    const { as } = setup();
-    const priya = (await as(APPROVER).get('/home')).body;
-    const samuel = (await as(APPROVER_2).get('/home')).body;
-    const actionable = async (user: string) => {
-      const apr = (await as(user).get('/apps/approvals/requests')).body.rows as Array<{ status: string; actions: { approve: { allowed: boolean } } }>;
-      const kyc = (await as(user).get('/apps/kyc/cases')).body.rows as Array<{ actions: { approve: { allowed: boolean } } }>;
-      const n = (rows: Array<{ actions: { approve: { allowed: boolean } } }>) => rows.filter((r) => r.actions.approve.allowed).length;
-      return { apr: n(apr), total: n(apr) + n(kyc) };
-    };
-    const [p, s, o] = [await actionable(APPROVER), await actionable(APPROVER_2), await actionable(OPERATOR)];
-    expect(s.apr).toBe(p.apr + 1); // Priya can't sign her own APR-1003
-    expect(o.apr).toBe(0);
-    expect([priya.waitingOnYou, samuel.waitingOnYou, (await as(OPERATOR).get('/home')).body.waitingOnYou]).toEqual([p.total, s.total, o.total]);
-    expect(priya.spotlight).toMatchObject({ app: 'approvals', reason: 'waiting_on_you' });
+  it('withdraw() writes one entry for the requester and nothing for anyone else', () => {
+    const f = new Foundation(() => NOW);
+    const col = f.collection<Approvable>({ app: 't', recordType: 'R', label: (r) => r.id, redact: (r) => ({ ...r }) });
+    f.change(u(OPERATOR), col, { action: 'created', summary: 'Opened', apply: () => req(OPERATOR) });
+    expect(() => withdraw(f, u(APPROVER), col, 'r1')).toThrow('Only the person who opened it can withdraw');
+    expect(f.changeLog.size).toBe(1);
+    expect(withdraw(f, u(OPERATOR), col, 'r1').status).toBe('withdrawn');
+    expect(f.changeLog.size).toBe(2);
+    expect(canDecide(u(APPROVER), col.get('r1')!, 'approved')).toMatchObject({ code: 'not_pending' });
   });
 });
 

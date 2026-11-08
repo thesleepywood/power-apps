@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { Foundation } from '../src/foundation/server/foundation';
 import { ApiError } from '../src/foundation/server/errors';
 import { findUser } from '../src/foundation/shared/users';
-import { SEED_REQUESTS } from '../src/approvals/seed';
-import { APPROVER, APPROVER_2, NEW_REQUEST, NOW, OBSERVER, OPERATOR, OPERATOR_2, PENDING_BY_APPROVER, PENDING_BY_OPERATOR, setup } from './helpers';
+import { SEED_CASES } from '../src/kyc/seed';
+import { APPROVER, APPROVER_2, KYC_APPROVED, KYC_HIGH_PENDING, KYC_HIGH_WAITING, KYC_LOW_BY_APPROVER, KYC_LOW_BY_OPERATOR_2, NOW, OBSERVER, OPERATOR, setup } from './helpers';
+
+const casePath = (id: string, action: string) => `/apps/kyc/cases/${id}/${action}`;
 
 describe('Foundation.change', () => {
   const make = () => {
@@ -69,17 +71,17 @@ describe('Foundation.change', () => {
 describe('one change-log entry per change, over HTTP', () => {
   const count = async (as: ReturnType<typeof setup>['as']) => (await as(OBSERVER).get('/changes')).body.length as number;
 
-  it('seed history is in the log: one entry per opened request and per decision', async () => {
+  it('seed history is in the log: one entry per opened record, escalation and decision', async () => {
     const { as } = setup();
-    const expected = SEED_REQUESTS.length + SEED_REQUESTS.filter((s) => s.outcome).length;
-    expect((await as(OBSERVER).get('/changes?app=approvals')).body).toHaveLength(expected);
+    const expected = SEED_CASES.length + SEED_CASES.filter((s) => s.escalated).length + SEED_CASES.filter((s) => s.outcome).length;
+    expect((await as(OBSERVER).get('/changes')).body).toHaveLength(expected);
   });
 
   it.each([
-    ['create', OPERATOR, '/apps/approvals/requests', NEW_REQUEST],
-    ['approve', APPROVER_2, `/apps/approvals/requests/${PENDING_BY_OPERATOR}/approve`, {}],
-    ['reject', APPROVER, `/apps/approvals/requests/${PENDING_BY_OPERATOR}/reject`, { note: 'Not enough history' }],
-    ['withdraw', OPERATOR, `/apps/approvals/requests/${PENDING_BY_OPERATOR}/withdraw`, {}],
+    ['approve', OPERATOR, casePath(KYC_LOW_BY_OPERATOR_2, 'approve'), {}],
+    ['escalate', OPERATOR, casePath(KYC_HIGH_PENDING, 'approve'), {}],
+    ['final approve', APPROVER_2, casePath(KYC_HIGH_WAITING, 'approve'), {}],
+    ['reject', APPROVER, casePath(KYC_LOW_BY_OPERATOR_2, 'reject'), { note: 'Not enough history' }],
   ])('%s adds exactly one entry', async (_name, user, path, body) => {
     const { as } = setup();
     const before = await count(as);
@@ -92,12 +94,12 @@ describe('one change-log entry per change, over HTTP', () => {
   });
 
   it.each([
-    ['observer create', OBSERVER, '/apps/approvals/requests', NEW_REQUEST],
-    ['operator approve', OPERATOR_2, `/apps/approvals/requests/${PENDING_BY_OPERATOR}/approve`, {}],
-    ['self approve', APPROVER, `/apps/approvals/requests/${PENDING_BY_APPROVER}/approve`, {}],
-    ['reject without note', APPROVER, `/apps/approvals/requests/${PENDING_BY_OPERATOR}/reject`, {}],
-    ['invalid create', OPERATOR, '/apps/approvals/requests', { title: '' }],
-    ['unknown record', APPROVER, '/apps/approvals/requests/APR-9999/approve', {}],
+    ['observer approve', OBSERVER, casePath(KYC_LOW_BY_OPERATOR_2, 'approve'), {}],
+    ['operator approve while waiting', OPERATOR, casePath(KYC_HIGH_WAITING, 'approve'), {}],
+    ['self approve', APPROVER, casePath(KYC_LOW_BY_APPROVER, 'approve'), {}],
+    ['reject without note', APPROVER, casePath(KYC_LOW_BY_OPERATOR_2, 'reject'), {}],
+    ['decide a closed record', APPROVER_2, casePath(KYC_APPROVED, 'reject'), { note: 'changed my mind' }],
+    ['unknown record', APPROVER, casePath('KYC-9999', 'approve'), {}],
   ])('refused change (%s) adds no entry', async (_name, user, path, body) => {
     const { as } = setup();
     const before = await count(as);
@@ -110,8 +112,8 @@ describe('one change-log entry per change, over HTTP', () => {
     const { as } = setup();
     const all = (await as(OPERATOR).get('/changes')).body as Array<{ at: string }>;
     expect([...all].sort((a, b) => (a.at < b.at ? 1 : -1)).map((e) => e.at)).toEqual(all.map((e) => e.at));
-    const one = (await as(OPERATOR).get('/changes?app=approvals&recordId=APR-1002')).body as Array<{ action: string; recordId: string }>;
+    const one = (await as(OPERATOR).get(`/changes?app=kyc&recordId=${KYC_APPROVED}`)).body as Array<{ action: string; recordId: string }>;
     expect(one.map((e) => e.action)).toEqual(['approved', 'created']);
-    expect(one.every((e) => e.recordId === 'APR-1002')).toBe(true);
+    expect(one.every((e) => e.recordId === KYC_APPROVED)).toBe(true);
   });
 });
