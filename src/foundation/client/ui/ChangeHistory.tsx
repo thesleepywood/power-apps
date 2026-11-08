@@ -7,7 +7,7 @@ import { Avatar } from './primitives';
 import { EmptyState, ErrorState, LoadingState } from './states';
 import { StatusBadge } from './StatusBadge';
 
-const HIDDEN = new Set(['id', 'requestedAt', 'decidedAt', 'decidedBy', 'requestedBy']);
+const HIDDEN = new Set(['id', 'requestedAt', 'decidedAt', 'decidedBy', 'requestedBy', 'escalatedBy', 'escalatedAt']);
 
 function show(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
