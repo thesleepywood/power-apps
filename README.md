@@ -1,20 +1,37 @@
 # Keel — internal tools foundation
 
-A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page** and two apps built on it: the **KYC Review Queue** and the **Refunds Dashboard** (see `docs/spec.md`).
+## What it does
 
-Everything is in memory: no real sign-in, no database, no external services. Restart the server and all data goes back to the seed state.
+Keel is a small, owned TypeScript codebase that replaces low-code internal tools (e.g. Power Apps) for a fintech ops team. It is one web app with:
 
-## Run it
+- **Foundation**: demo sign-in with three roles (Operator, Approver, Observer), server-side permissions that explain every "no", SSN masking, an approvals primitive that blocks self-approval, an append-only change log, and a shared design system and app shell.
+- **Home page**: what your role can do, live counts per app, the record that most needs you, and the full change log across all apps.
+- **KYC Review Queue**: identity-check cases; high-risk cases need an Approver's sign-off.
+- **Refunds Dashboard**: refund requests from $5 to $2,000; up to $1,000 is approved automatically, anything above waits for an Approver.
 
-Requires Node 20.11+.
+Everything is in memory: no real sign-in, no database, no external services. Restart the server and all data goes back to the seed state. The full spec is in [`docs/spec.md`](docs/spec.md).
+
+## How to run it
+
+Requires Node 20.11+ and npm.
 
 ```bash
-npm install
-npm run demo    # http://localhost:5173 (API + UI on one port)
-npm run check   # typecheck + all tests
+npm install       # or `npm ci` to install exactly what package-lock.json pins
+npm run demo      # starts API + UI on one port: http://localhost:5173
 ```
 
-Set `PORT` to use a different port. `npm run build` makes a production bundle in `dist/`; `NODE_ENV=production npm run demo` serves it.
+Open http://localhost:5173, pick a person on the sign-in screen, and follow the "Try it" steps below. Stop the server with Ctrl+C; starting it again resets all data.
+
+Other commands:
+
+| Command | What it does |
+| --- | --- |
+| `npm run check` | `tsc --noEmit`, then all Vitest tests (see [Tests](#tests)) |
+| `npm run typecheck` | Type check only |
+| `npm test` | Tests only |
+| `npm run build` | Production bundle in `dist/` |
+| `NODE_ENV=production npm run demo` | Serve the `dist/` bundle instead of the Vite dev server |
+| `PORT=8080 npm run demo` | Use a different port |
 
 ## What you can do
 
