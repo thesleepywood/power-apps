@@ -12,6 +12,13 @@ export function maskSsn(ssn: string, mode: 'last4' | 'full' = 'last4'): string {
   return `${MASK.repeat(3)}-${MASK.repeat(2)}-${last4}`;
 }
 
+const SSN_IN_TEXT = /(?<!\d)\d{3}[- ]?\d{2}[- ]?\d{4}(?!\d)/g;
+
+/** Hides anything SSN-shaped inside free text (titles, reasons, notes). */
+export function scrubSsns(text: string): string {
+  return (text ?? '').replace(SSN_IN_TEXT, (m) => maskSsn(m, 'full'));
+}
+
 /** Generic tail masking for account numbers and the like. */
 export function maskTail(value: string, visible = 4): string {
   const v = value ?? '';

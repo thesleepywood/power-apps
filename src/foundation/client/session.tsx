@@ -45,27 +45,42 @@ export interface ApiState<T> {
   reload: () => void;
 }
 
-/** GETs `path` and refetches whenever any change is made anywhere in the app. */
+/**
+ * GETs `path` and refetches whenever any change is made anywhere in the app.
+ * Data is tagged with the person it was fetched for, so after a persona switch
+ * nobody sees the previous person's (differently masked) response.
+ */
 export function useApi<T>(path: string | null): ApiState<T> {
   const { version, user, signOut } = useSession();
-  const [state, setState] = useState<{ data?: T; error: ApiRequestError | null; loading: boolean }>({ error: null, loading: true });
+  const userId = user?.id ?? null;
+  const [state, setState] = useState<{ data?: T; error: ApiRequestError | null; loading: boolean; userId: string | null }>({
+    error: null,
+    loading: true,
+    userId,
+  });
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     if (!path) return;
     let live = true;
-    setState((s) => ({ ...s, loading: true }));
+    setState((s) => (s.userId === userId ? { ...s, loading: true } : { error: null, loading: true, userId }));
     api<T>(path)
-      .then((data) => live && setState({ data, error: null, loading: false }))
+      .then((data) => live && setState({ data, error: null, loading: false, userId }))
       .catch((error: ApiRequestError) => {
         if (!live) return;
         if (error.status === 401) signOut();
-        setState({ data: undefined, error, loading: false });
+        setState({ data: undefined, error, loading: false, userId });
       });
     return () => {
       live = false;
     };
-  }, [path, version, nonce, user?.id, signOut]);
+  }, [path, version, nonce, userId, signOut]);
 
-  return { data: state.data, error: state.error, loading: state.loading, reload: () => setNonce((n) => n + 1) };
+  const current = state.userId === userId;
+  return {
+    data: current ? state.data : undefined,
+    error: current ? state.error : null,
+    loading: current ? state.loading : true,
+    reload: () => setNonce((n) => n + 1),
+  };
 }

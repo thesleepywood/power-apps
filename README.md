@@ -45,7 +45,7 @@ How it fits together:
 - The client sends the chosen person in an `x-keel-user` header. That is the only "auth" (demo only).
 - Every change goes through `Foundation.change()`. It applies the change and writes exactly one change-log entry. If the change is refused or throws, nothing is stored and nothing is logged.
 - The server checks permissions on every request and returns `{ error: { code, message } }` when it says no. Record responses also include an `actions` object (`{ allowed, reason }` for each action), so the UI only displays the server's decision and never makes its own.
-- SSNs are masked before any response leaves the server: Operators and Approvers see the last 4 digits, Observers see none. Change-log snapshots store only the fully masked value.
+- SSNs are masked before any response leaves the server: Operators and Approvers see the last 4 digits, Observers see none. Change-log snapshots store only the fully masked value, and SSN-shaped numbers typed into titles, reasons or notes are masked before they are saved.
 
 ## API
 
@@ -71,7 +71,8 @@ How it fits together:
 `npm run check` runs `tsc --noEmit` and then Vitest:
 
 - `tests/permissions.test.ts`: server-side role checks and the reasons returned
-- `tests/masking.test.ts`: masking helpers; checks that no raw SSN appears in any API response or the change log
+- `tests/masking.test.ts`: masking helpers; checks that no raw SSN appears in any API response or the change log, even when one is typed into free text
 - `tests/changeLog.test.ts`: exactly one entry per change, none for refused changes, entries can't be modified, newest first
 - `tests/approvals.test.ts`: no self-approval or self-rejection (in the primitive and over HTTP), withdraw rules
 - `tests/ui.test.tsx`: denied actions show their reason, status badges
+- `tests/session.test.tsx`: after switching person, the previous person's data is never shown

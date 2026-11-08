@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maskSsn, maskTail, ssnForViewer } from '../src/foundation/server/masking';
+import { maskSsn, maskTail, scrubSsns, ssnForViewer } from '../src/foundation/server/masking';
 import { findUser } from '../src/foundation/shared/users';
 import { ALL_SEED_SSNS, APPROVER, NEW_REQUEST, OBSERVER, OPERATOR, PENDING_BY_OPERATOR, setup } from './helpers';
 
@@ -55,5 +55,30 @@ describe('sensitive data never leaves the server unmasked', () => {
     const { as } = setup();
     const res = await as(OBSERVER).get(`/apps/approvals/requests/${PENDING_BY_OPERATOR}`);
     expect(res.body.customerSsn).toBe('•••-••-••••');
+  });
+});
+
+describe('SSNs typed into free text', () => {
+  it('scrubSsns hides SSN-shaped numbers and leaves other text alone', () => {
+    expect(scrubSsns('Caller 921-55-4401 confirmed, ref 921554401')).toBe('Caller •••-••-•••• confirmed, ref •••-••-••••');
+    expect(scrubSsns('Amount $1,840.50 on 2026-11-07, card 4111111111111111')).toBe('Amount $1,840.50 on 2026-11-07, card 4111111111111111');
+  });
+
+  it('are never stored or returned from titles, reasons, summaries or decision notes', async () => {
+    const { as } = setup();
+    const raw = '987-65-4329';
+    const created = await as(OPERATOR)
+      .post('/apps/approvals/requests')
+      .send({ ...NEW_REQUEST, title: `Check ${raw}`, reason: `SSN ${raw}`, summary: `Customer said ${raw.replace(/-/g, '')}` });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    const rejected = await as(APPROVER).post(`/apps/approvals/requests/${id}/reject`).send({ note: `Mismatch on ${raw}` });
+    expect(rejected.status).toBe(200);
+    for (const user of [OPERATOR, APPROVER, OBSERVER]) {
+      for (const path of [`/apps/approvals/requests/${id}`, '/apps/approvals/requests', '/changes', '/home']) {
+        const body = JSON.stringify((await as(user).get(path)).body);
+        expect(body.includes(raw) || body.includes(raw.replace(/-/g, '')), `${user} ${path}`).toBe(false);
+      }
+    }
   });
 });

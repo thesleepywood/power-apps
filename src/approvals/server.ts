@@ -7,7 +7,7 @@ import { canDecide, decide, withdraw, type Approvable } from '../foundation/serv
 import { invalid } from '../foundation/server/errors';
 import type { Foundation } from '../foundation/server/foundation';
 import { currentUser } from '../foundation/server/http';
-import { maskSsn } from '../foundation/server/masking';
+import { maskSsn, scrubSsns } from '../foundation/server/masking';
 import { canChange, enforce } from '../foundation/server/permissions';
 import { findUser, type User } from '../foundation/shared/users';
 
@@ -32,6 +32,8 @@ function parseNew(body: unknown): NewSignOffRequest {
     if (v.length > max) throw invalid(`${label} must be ${max} characters or fewer.`);
     return v;
   };
+  // SSNs belong only in the masked SSN field, never in free text.
+  const freeText = (k: string, label: string, max?: number) => scrubSsns(text(k, label, max));
   const kind = b.kind as RequestKind;
   if (!REQUEST_KINDS.includes(kind)) throw invalid(`Type must be one of: ${REQUEST_KINDS.join(', ')}.`);
   const ssn = text('customerSsn', 'Customer SSN', 20);
@@ -41,15 +43,16 @@ function parseNew(body: unknown): NewSignOffRequest {
     amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw invalid('Amount must be a positive number.');
     amount = Math.round(amount * 100) / 100;
+    if (amount <= 0) throw invalid('Amount must be at least $0.01.');
   }
   return {
     kind,
-    title: text('title', 'Title', 120),
-    customerName: text('customerName', 'Customer name', 120),
+    title: freeText('title', 'Title', 120),
+    customerName: freeText('customerName', 'Customer name', 120),
     customerSsn: ssn.replace(/^(\d{3})-?(\d{2})-?(\d{4})$/, '$1-$2-$3'),
     amount,
-    reason: text('reason', 'Reason', 200),
-    summary: typeof b.summary === 'string' ? b.summary.trim().slice(0, 1000) : '',
+    reason: freeText('reason', 'Reason', 200),
+    summary: typeof b.summary === 'string' ? scrubSsns(b.summary.trim().slice(0, 1000)) : '',
   };
 }
 

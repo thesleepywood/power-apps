@@ -2,6 +2,7 @@ import type { Role } from '../shared/roles';
 import type { Decision } from '../shared/types';
 import type { User } from '../shared/users';
 import type { Collection, Foundation } from './foundation';
+import { scrubSsns } from './masking';
 import { enforce, deny, allow, firstDenial, requireRole } from './permissions';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
@@ -82,7 +83,7 @@ export function decide<T extends Approvable>(
       const record = current!;
       enforce(canDecide(actor, record, input.decision, options));
       const at = (input.at ?? foundation.now()).toISOString();
-      return { ...record, status: input.decision, decidedBy: actor.id, decidedAt: at, decisionNote: input.note?.trim() || undefined };
+      return { ...record, status: input.decision, decidedBy: actor.id, decidedAt: at, decisionNote: scrubSsns(input.note?.trim() ?? '') || undefined };
     },
   });
 }

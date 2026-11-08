@@ -79,3 +79,12 @@ describe('server-side enforcement over HTTP', () => {
     expect(res.body.error.message).toMatch(/SSN/);
   });
 });
+
+describe('amount validation', () => {
+  it('rejects amounts that round to $0.00', async () => {
+    const { as } = setup();
+    const res = await as(OPERATOR).post('/apps/approvals/requests').send({ ...NEW_REQUEST, amount: 0.004 });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Amount must be at least $0.01.');
+  });
+});
