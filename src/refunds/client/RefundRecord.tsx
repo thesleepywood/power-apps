@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, X } from 'lucide-react';
 import type { Person, RefundView } from '../types';
@@ -25,6 +25,7 @@ export function RefundRecord({ id, compact = false }: { id: string; compact?: bo
   const { user, invalidate } = useSession();
   const toast = useToast();
   const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null);
+  const closeDialog = useCallback(() => setDialog(null), []);
 
   if (loading && !r) return <Card><LoadingState rows={6} /></Card>;
   if (error || !r) {
@@ -151,7 +152,7 @@ export function RefundRecord({ id, compact = false }: { id: string; compact?: bo
         confirmLabel={`Approve ${amount(r.amountCents)}`}
         note={{ label: 'Note', placeholder: 'Anything the team should know' }}
         onConfirm={act('approve', `${r.id} approved`)}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
       />
       <ConfirmDialog
         open={dialog === 'reject'}
@@ -161,7 +162,7 @@ export function RefundRecord({ id, compact = false }: { id: string; compact?: bo
         confirmLabel="Reject refund"
         note={{ label: 'Why are you rejecting it?', placeholder: 'The requester will see this in the change log', required: true }}
         onConfirm={act('reject', `${r.id} rejected`)}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
       />
     </>
   );

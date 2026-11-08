@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, SearchX, Wallet } from 'lucide-react';
 import { RefundRecord } from './RefundRecord';
@@ -76,6 +76,8 @@ export function RefundsQueuePage() {
   const [filter, setFilter] = useState<Filter>('pending');
   const [requesting, setRequesting] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // ConfirmDialog re-runs its open effect (reset + focus) whenever onClose changes; keep it stable while the form re-renders.
+  const closeRequest = useCallback(() => setRequesting(false), []);
   const { data, error, loading, reload } = useApi<RefundList>('/apps/refunds/refunds');
   const { invalidate } = useSession();
   const toast = useToast();
@@ -174,7 +176,7 @@ export function RefundsQueuePage() {
         confirmLabel="Submit request"
         note={{ label: 'Reason', placeholder: 'e.g. Duplicate card charge', required: true }}
         onConfirm={submit}
-        onClose={() => setRequesting(false)}
+        onClose={closeRequest}
       />
     </>
   );
