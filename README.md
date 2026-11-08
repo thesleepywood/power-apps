@@ -80,6 +80,18 @@ How it fits together:
 2. Write a server module that implements `ServerApp` (`src/foundation/server/apps.ts`) and add it in `src/server/apps.ts`.
 3. Add its routes in `src/client/App.tsx` and its record view in `src/client/recordViews.ts`.
 
+## Known issues
+
+Found in an attack pass. See [`docs/reports/attack.md`](docs/reports/attack.md) for details and repro steps.
+
+- **The demo's Vite dev server serves source files, including full seed SSNs.** `GET /src/kyc/seed.ts` returns every raw SSN without sign-in, and the server listens on all network interfaces (`*:5173`). Possible fixes: bind to `127.0.0.1`, keep server-only files out of the Vite root, or serve `dist` for the demo.
+- **SSN scrubbing in free text misses some formats.** `921.55.4401`, `921/55/4401`, en-dash separators, `921 - 55 - 4401` and full-width digits are stored and returned unmasked.
+- **Refund amounts have no upper bound.** `amountCents` such as `1e21` is accepted.
+- **Oversized request bodies (>100 KB) return 500** instead of 413 with a readable message.
+- **Two controls no test protects:**
+  - The persona-switch guard in `useApi` (`src/foundation/client/session.tsx`). If you remove it, `tests/session.test.tsx` still passes, but for one render the new person is shown the previous person's data.
+  - The SSN scrubbing in the refunds change-log `redact`. Removing it changes nothing today, because refund text is already scrubbed when it comes in.
+
 ## Tests
 
 `npm run check` runs `tsc --noEmit` and then Vitest:
