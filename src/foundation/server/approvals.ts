@@ -5,8 +5,13 @@ import type { Collection, Foundation } from './foundation';
 import { scrubSsns } from './masking';
 import { enforce, deny, allow, firstDenial, requireRole } from './permissions';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+/** `waiting` = escalated: a first reviewer approved it and it now needs an Approver's final sign-off. */
+export type ApprovalStatus = 'pending' | 'waiting' | 'approved' | 'rejected' | 'withdrawn';
 export type ApprovalDecision = 'approved' | 'rejected';
+
+/** Statuses that still need a decision. */
+export const OPEN_STATUSES: ApprovalStatus[] = ['pending', 'waiting'];
+export const isOpen = (record: Approvable) => OPEN_STATUSES.includes(record.status);
 
 /** Fields any record needs to go through sign-off. */
 export interface Approvable {
@@ -14,19 +19,28 @@ export interface Approvable {
   status: ApprovalStatus;
   requestedBy: string;
   requestedAt: string;
+  escalatedBy?: string;
+  escalatedAt?: string;
+  escalationNote?: string;
   decidedBy?: string;
   decidedAt?: string;
   decisionNote?: string;
 }
 
 export interface ApprovalOptions {
-  /** Which roles may sign off. Defaults to Approvers only. */
+  /** Which roles may decide (or escalate) a pending record. Defaults to Approvers only. */
   approverRoles?: Role[];
+  /** Which roles may decide a record that is waiting for an Approver. Defaults to Approvers only. */
+  escalatedRoles?: Role[];
 }
 
+const already = (status: ApprovalStatus) =>
+  deny('not_pending', status === 'waiting' ? 'This request is already waiting for an Approver' : `This request is already ${status}`);
+
 /**
- * May `user` approve/reject `record`? Invariant: a person can never decide on
- * a request they opened themselves, regardless of role.
+ * May `user` approve/reject `record`? Invariants: a person can never decide on
+ * a request they opened themselves, regardless of role; and whoever escalated
+ * a record can't also give its final sign-off.
  */
 export function canDecide(
   user: User,
@@ -34,18 +48,31 @@ export function canDecide(
   decision: ApprovalDecision,
   options: ApprovalOptions = {},
 ): Decision {
+  const waiting = record.status === 'waiting';
   return firstDenial(
-    () => requireRole(user, options.approverRoles ?? ['approver']),
-    () => (record.status === 'pending' ? allow() : deny('not_pending', `This request is already ${record.status}`)),
+    () => requireRole(user, waiting ? (options.escalatedRoles ?? ['approver']) : (options.approverRoles ?? ['approver'])),
+    () => (isOpen(record) ? allow() : already(record.status)),
     () =>
       record.requestedBy === user.id
         ? deny(
             'self_approval',
             decision === 'approved'
               ? "You can't approve your own request"
-              : "You can't reject your own request — withdraw it instead",
+              : "You can't reject your own request",
           )
         : allow(),
+    () =>
+      waiting && record.escalatedBy === user.id
+        ? deny('self_escalated', 'You escalated this, so another Approver has to sign off')
+        : allow(),
+  );
+}
+
+/** May `user` approve a pending record by escalating it for an Approver's final sign-off? */
+export function canEscalate(user: User, record: Approvable, options: ApprovalOptions = {}): Decision {
+  return firstDenial(
+    () => canDecide(user, record, 'approved', options),
+    () => (record.status === 'pending' ? allow() : already(record.status)),
   );
 }
 
@@ -53,7 +80,7 @@ export function canDecide(
 export function canWithdraw(user: User, record: Approvable): Decision {
   return firstDenial(
     () => requireRole(user, ['operator', 'approver']),
-    () => (record.status === 'pending' ? allow() : deny('not_pending', `This request is already ${record.status}`)),
+    () => (record.status === 'pending' ? allow() : already(record.status)),
     () => (record.requestedBy === user.id ? allow() : deny('not_requester', 'Only the person who opened it can withdraw')),
   );
 }
@@ -64,6 +91,8 @@ export interface DecideInput {
   summary?: string;
   at?: Date;
 }
+
+const cleanNote = (note?: string) => scrubSsns(note?.trim() ?? '') || undefined;
 
 /** Records a sign-off decision. Enforced here, so no caller can skip the checks. */
 export function decide<T extends Approvable>(
@@ -83,7 +112,39 @@ export function decide<T extends Approvable>(
       const record = current!;
       enforce(canDecide(actor, record, input.decision, options));
       const at = (input.at ?? foundation.now()).toISOString();
-      return { ...record, status: input.decision, decidedBy: actor.id, decidedAt: at, decisionNote: scrubSsns(input.note?.trim() ?? '') || undefined };
+      return { ...record, status: input.decision, decidedBy: actor.id, decidedAt: at, decisionNote: cleanNote(input.note) };
+    },
+  });
+}
+
+export interface EscalateInput {
+  note?: string;
+  summary?: string;
+  at?: Date;
+}
+
+/**
+ * Approves a pending record as far as `actor` can take it: moves it to
+ * `waiting` for an Approver's final sign-off instead of approving it.
+ */
+export function escalate<T extends Approvable>(
+  foundation: Foundation,
+  actor: User,
+  collection: Collection<T>,
+  id: string,
+  input: EscalateInput = {},
+  options: ApprovalOptions = {},
+): T {
+  return foundation.change(actor, collection, {
+    id,
+    action: 'waiting',
+    summary: input.summary ?? 'Sent to an Approver',
+    at: input.at,
+    apply: (current) => {
+      const record = current!;
+      enforce(canEscalate(actor, record, options));
+      const at = (input.at ?? foundation.now()).toISOString();
+      return { ...record, status: 'waiting', escalatedBy: actor.id, escalatedAt: at, escalationNote: cleanNote(input.note) };
     },
   });
 }

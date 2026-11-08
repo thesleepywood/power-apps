@@ -125,7 +125,7 @@ export function HomePage() {
             icon={<Inbox size={18} />}
             label="Waiting on you"
             value={home.data?.waitingOnYou}
-            hint={user.role === 'approver' ? 'Requests you can sign off' : `Sign-off is for Approvers`}
+            hint={user.role === 'observer' ? 'Observers have read-only access' : 'Records you can decide right now'}
           />
           <Stat icon={<ListChecks size={18} />} label="Your open requests" value={home.data?.yourOpenRequests} hint="Opened by you, still pending" />
           <Stat icon={<ScrollText size={18} />} label="Changes, last 24 hours" value={home.data?.changesLast24h} hint="Across every app" />
@@ -159,7 +159,7 @@ export function HomePage() {
               <span className="app-card-icon"><Sparkles size={20} /></span>
               <span className="app-card-body">
                 <span className="app-card-name">More apps coming</span>
-                <span className="app-card-desc">KYC Review Queue and Refunds Dashboard plug into the same foundation.</span>
+                <span className="app-card-desc">The Refunds Dashboard plugs into the same foundation.</span>
               </span>
             </div>
           </div>

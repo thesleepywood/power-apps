@@ -1,7 +1,7 @@
 import express from 'express';
 import { approvalOf } from './view';
 import { SEED_REQUESTS } from './seed';
-import { REQUEST_KINDS, type NewSignOffRequest, type RequestKind } from './types';
+import { REQUEST_KINDS, type NewSignOffRequest, type RequestKind, type RequestStatus } from './types';
 import type { ServerAppFactory } from '../foundation/server/apps';
 import { canDecide, decide, withdraw, type Approvable } from '../foundation/server/approvals';
 import { invalid } from '../foundation/server/errors';
@@ -12,6 +12,7 @@ import { canChange, enforce } from '../foundation/server/permissions';
 import { findUser, type User } from '../foundation/shared/users';
 
 export interface SignOffRequest extends Approvable {
+  status: RequestStatus;
   kind: RequestKind;
   title: string;
   customerName: string;

@@ -72,7 +72,7 @@ describe('one change-log entry per change, over HTTP', () => {
   it('seed history is in the log: one entry per opened request and per decision', async () => {
     const { as } = setup();
     const expected = SEED_REQUESTS.length + SEED_REQUESTS.filter((s) => s.outcome).length;
-    expect(await count(as)).toBe(expected);
+    expect((await as(OBSERVER).get('/changes?app=approvals')).body).toHaveLength(expected);
   });
 
   it.each([

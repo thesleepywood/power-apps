@@ -1,6 +1,6 @@
 # Keel — internal tools foundation
 
-A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. This PR is the **Foundation + Home page**. The KYC Review Queue and Refunds Dashboard come later as their own apps on top of the same foundation (see `docs/spec.md`).
+A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page**, a sample **Approvals** app and the **KYC Review Queue**. The Refunds Dashboard comes later as its own app on top of the same foundation (see `docs/spec.md`).
 
 Everything is in memory: no real sign-in, no database, no external services. Restart the server and all data goes back to the seed state.
 
@@ -27,6 +27,11 @@ Set `PORT` to use a different port. `npm run build` makes a production bundle in
    Use the person picker at the bottom of the sidebar to switch at any time.
 2. **Home** — greets you by first name and lists what your role can and can't do. Shows app cards with live open counts, the record that most needs you (with its masked SSN, change history and gated Approve/Reject actions), and the **Full record**: every change across all apps, newest first. Click a row to open that record.
 3. **Approvals** — the sample app that uses the foundation: open a sign-off request, then approve, reject or withdraw it. Denied actions stay visible with the server's reason, e.g. *Approvers only*, *Observers have read-only access*, *You can't approve your own request*.
+4. **KYC Review Queue** — 10 fictional identity-check cases (2 high-risk). The queue shows name, masked SSN, risk, status and opened date; a case page shows the review reason, summary, change history and Approve/Reject.
+   - Low-risk: an Operator or Approver approves or rejects it.
+   - High-risk: approving sends it to **Waiting for approver**. From there only an Approver can approve or reject it, and not the person who sent it on. While it's still pending, an Operator or Approver can reject it.
+   - Nobody can decide a case they opened.
+   - Try it: as Maya (Operator), approve KYC-1001 → it waits for an Approver. Switch to Priya and approve it. KYC-1005 is already waiting; Priya opened it, so Samuel has to decide it.
 
 ## Foundation pieces
 
@@ -35,7 +40,7 @@ Set `PORT` to use a different port. `npm run build` makes a production bundle in
 | Roles and demo users | `src/foundation/shared/roles.ts`, `users.ts` |
 | Server-side permissions with "why not" reasons | `src/foundation/server/permissions.ts` |
 | Sensitive-field masking (`maskSsn`, `ssnForViewer`) | `src/foundation/server/masking.ts` |
-| Approvals primitive (no self-approval) | `src/foundation/server/approvals.ts` |
+| Approvals primitive (no self-approval; `escalate()` to *Waiting for approver*) | `src/foundation/server/approvals.ts` |
 | Change log (one entry per change, before/after, append-only) | `src/foundation/server/changeLog.ts`, `foundation.ts` |
 | App registry (drives the sidebar and Home cards) | `src/registry.ts` |
 | Design system and app shell | `src/foundation/client/theme.css`, `src/foundation/client/ui/`, `AppShell.tsx` |
@@ -59,6 +64,9 @@ How it fits together:
 | GET/POST | `/api/apps/approvals/requests` | List / open a request |
 | GET | `/api/apps/approvals/requests/:id` | One request (masked) |
 | POST | `/api/apps/approvals/requests/:id/{approve,reject,withdraw}` | Decide / withdraw |
+| GET | `/api/apps/kyc/cases` | KYC queue (masked) |
+| GET | `/api/apps/kyc/cases/:id` | One case (masked), with `actions` |
+| POST | `/api/apps/kyc/cases/:id/{approve,reject}` | Approve (sends high-risk to an Approver) / reject (note required) |
 
 ## Adding an app
 
@@ -73,6 +81,7 @@ How it fits together:
 - `tests/permissions.test.ts`: server-side role checks and the reasons returned
 - `tests/masking.test.ts`: masking helpers; checks that no raw SSN appears in any API response or the change log, even when one is typed into free text
 - `tests/changeLog.test.ts`: exactly one entry per change, none for refused changes, entries can't be modified, newest first
-- `tests/approvals.test.ts`: no self-approval or self-rejection (in the primitive and over HTTP), withdraw rules
+- `tests/approvals.test.ts`: no self-approval or self-rejection (in the primitive and over HTTP), withdraw rules, escalation primitive
+- `tests/kyc.test.ts`: high-risk escalation, Approver-only decisions once waiting, Operators decide low-risk, no self-approval at any step, no raw SSN in any response or the change log, one log entry per change
 - `tests/ui.test.tsx`: denied actions show their reason, status badges
 - `tests/session.test.tsx`: after switching person, the previous person's data is never shown
