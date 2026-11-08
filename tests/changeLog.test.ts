@@ -69,12 +69,12 @@ describe('Foundation.change', () => {
 });
 
 describe('one change-log entry per change, over HTTP', () => {
-  const count = async (as: ReturnType<typeof setup>['as']) => (await as(OBSERVER).get('/changes')).body.length as number;
+  const count = async (as: ReturnType<typeof setup>['as']) => (await as(OBSERVER).get('/changes?app=kyc')).body.length as number;
 
   it('seed history is in the log: one entry per opened record, escalation and decision', async () => {
     const { as } = setup();
     const expected = SEED_CASES.length + SEED_CASES.filter((s) => s.escalated).length + SEED_CASES.filter((s) => s.outcome).length;
-    expect((await as(OBSERVER).get('/changes')).body).toHaveLength(expected);
+    expect((await as(OBSERVER).get('/changes?app=kyc')).body).toHaveLength(expected);
   });
 
   it.each([
