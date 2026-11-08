@@ -81,9 +81,9 @@ echo "== Foundation changes vs main =="; git diff --stat "$BASE" -- src/foundati
 { git diff --name-only "$BASE" -- src/foundation; git ls-files --others --exclude-standard -- src/foundation; } \
   | grep -E "^($PROTECTED)$" && echo "STOP: protected foundation file changed" || echo "OK: no protected foundation files changed"
 { git diff "$BASE" -- src/foundation | grep -E '^\+[^+]'; git ls-files --others --exclude-standard -z -- src/foundation | xargs -0 -r cat; } \
-  | grep -inwE '<app-id>|kyc|refunds?' && echo "STOP: app-specific names in foundation code" || echo "OK: no app-specific names added"
+  | grep -inE '<app-id>|kyc|refund' && echo "STOP: app-specific names in foundation code" || echo "OK: no app-specific names added"
 ```
-Replace `<app-id>` with the new app's id and add any domain words (e.g. `refund`, `amount`).
+Replace `<app-id>` with the new app's id and add any domain words (e.g. `amount`). The match is a case-insensitive substring, so it also catches identifiers such as `kycCaseOf` and `RefundsDashboard`. If a match is a false positive (a short id inside an unrelated word), say so in the PR.
 
 Rules for reading the result:
 - **Any `STOP` line:** revert the change, or get the user's explicit OK before keeping it. Protected files need the user's sign-off. App-specific names mean the logic belongs in `src/<app>/`, not the foundation.
