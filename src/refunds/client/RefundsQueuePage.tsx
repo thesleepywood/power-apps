@@ -16,6 +16,9 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'all', label: 'All' },
 ];
 
+// Inputs in the shared .form-grid otherwise keep their intrinsic width and overflow the dialog.
+const FILL = { width: '100%' } as const;
+
 const matches = (f: Filter, r: RefundView) => f === 'all' || r.status === f;
 const amount = (cents: number) => formatMoney(cents / 100);
 
@@ -158,23 +161,23 @@ export function RefundsQueuePage() {
             <div className="form-grid">
               <label className="field">
                 <span className="field-label">Customer</span>
-                <input value={form.customer} onChange={set('customer')} placeholder="Name or business" />
+                <input style={FILL} value={form.customer} onChange={set('customer')} placeholder="Name or business" />
               </label>
               <label className="field">
                 <span className="field-label">Amount (USD)</span>
-                <input value={form.amount} onChange={set('amount')} placeholder="0.00" inputMode="decimal" />
+                <input style={FILL} value={form.amount} onChange={set('amount')} placeholder="0.00" inputMode="decimal" />
               </label>
               <label className="field is-wide">
                 <span className="field-label">
                   Summary<span className="field-optional"> (optional)</span>
                 </span>
-                <input value={form.summary} onChange={set('summary')} placeholder="What happened, for whoever decides it" />
+                <input style={FILL} value={form.summary} onChange={set('summary')} placeholder="What happened, for whoever decides it" />
               </label>
             </div>
           </>
         }
         confirmLabel="Submit request"
-        note={{ label: 'Reason', placeholder: 'e.g. Duplicate card charge', required: true }}
+        note={{ label: 'Reason (required)', placeholder: 'e.g. Duplicate card charge', required: true }}
         onConfirm={submit}
         onClose={closeRequest}
       />
