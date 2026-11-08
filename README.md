@@ -1,6 +1,6 @@
 # Keel — internal tools foundation
 
-A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page** and the **KYC Review Queue**. The Refunds Dashboard comes later as its own app on top of the same foundation (see `docs/spec.md`).
+A small, owned TypeScript codebase to replace low-code internal tools (e.g. Power Apps) for a fintech ops team. It has the **Foundation + Home page** and two apps built on it: the **KYC Review Queue** and the **Refunds Dashboard** (see `docs/spec.md`).
 
 Everything is in memory: no real sign-in, no database, no external services. Restart the server and all data goes back to the seed state.
 
@@ -31,6 +31,12 @@ Set `PORT` to use a different port. `npm run build` makes a production bundle in
    - High-risk: an Operator approving it sends it to **Waiting for approver**; from there only an Approver can approve or reject it. An Approver's approval is the final sign-off, so a case can never be left waiting with nobody able to finish it. While it's still pending, an Operator or Approver can reject it.
    - Nobody can decide a case they opened.
    - Try it: as Maya (Operator), approve KYC-1001 → it waits for an Approver. Switch to Priya and approve it. KYC-1005 is already waiting; Priya opened it, so Samuel has to decide it.
+4. **Refunds Dashboard** — 10 fictional refund requests ($5–$2,000). The queue has Pending / Approved / Rejected / All tabs with counts; a refund page shows the amount, customer, reason, summary, who requested and decided it, change history and Approve/Reject.
+   - Operators and Approvers can request a refund. Observers can't.
+   - $1,000.00 or less is approved automatically when it's requested (one change-log entry, no person as decider).
+   - Over $1,000.00 stays **Pending** until an Approver approves or rejects it. Operators can't decide refunds. Rejecting needs a note.
+   - Nobody can approve or reject a refund they requested — including an Approver.
+   - Try it: as Maya (Operator), open RF-2003 → Approve and Reject are locked with "Approvers only". Request a $250 refund → approved right away. Switch to Priya: RF-2001 is hers, so it's locked ("You can't approve your own request"); approve RF-2003 instead. Switch to Samuel to decide RF-2001.
 
 ## Foundation pieces
 
@@ -63,6 +69,10 @@ How it fits together:
 | GET | `/api/apps/kyc/cases` | KYC queue (masked) |
 | GET | `/api/apps/kyc/cases/:id` | One case (masked), with `actions` |
 | POST | `/api/apps/kyc/cases/:id/{approve,reject}` | Approve (an Operator's approval sends high-risk to an Approver) / reject (note required) |
+| GET | `/api/apps/refunds/refunds?status=` | Refunds, newest first, with per-row `actions` and the list's `request` action |
+| GET | `/api/apps/refunds/refunds/:id` | One refund, with `actions` |
+| POST | `/api/apps/refunds/refunds` | Request a refund (`customer`, `amountCents` > 0, `reason`, optional `summary`); ≤ 100000 cents is approved immediately |
+| POST | `/api/apps/refunds/refunds/:id/{approve,reject}` | Approver only, not the requester; reject needs a `note` |
 
 ## Adding an app
 
@@ -79,5 +89,6 @@ How it fits together:
 - `tests/changeLog.test.ts`: exactly one entry per change, none for refused changes, entries can't be modified, newest first
 - `tests/approvals.test.ts`: the approvals primitive: no self-approval or self-rejection, withdraw rules, escalation, and an exhaustive check that no waiting record is left without an eligible decider
 - `tests/kyc.test.ts`: high-risk escalation, Approver-only decisions once waiting, Operators decide low-risk, no case gets stuck, no self-approval at any step, no raw SSN in any response or the change log, one log entry per change
+- `tests/refunds.test.ts`: seed shape, auto-approval at $1,000 or less, Approver-only decisions above it, no self-approval (including Approvers), reject needs a note, exact refusal reasons with no log entry, one log entry per change, GET `actions` match POST for every role, no stuck refunds, Home counts and spotlight
 - `tests/ui.test.tsx`: denied actions show their reason, status badges
 - `tests/session.test.tsx`: after switching person, the previous person's data is never shown

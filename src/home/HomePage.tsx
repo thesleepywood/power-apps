@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, CalendarClock, Check, Inbox, ListChecks, Minus, ScrollText, Sparkles } from 'lucide-react';
+import { ArrowRight, CalendarClock, Check, Inbox, ListChecks, Minus, ScrollText } from 'lucide-react';
 import { RECORD_VIEWS } from '../client/recordViews';
 import { appIcon } from '../foundation/client/icons';
 import { formatDateTime, greeting, timeAgo } from '../foundation/client/format';
@@ -155,13 +155,6 @@ export function HomePage() {
                 </Link>
               );
             })}
-            <div className="app-card is-placeholder">
-              <span className="app-card-icon"><Sparkles size={20} /></span>
-              <span className="app-card-body">
-                <span className="app-card-name">More apps coming</span>
-                <span className="app-card-desc">The Refunds Dashboard plugs into the same foundation.</span>
-              </span>
-            </div>
           </div>
         )}
       </section>

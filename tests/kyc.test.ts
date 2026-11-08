@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SEED_CASES } from '../src/kyc/seed';
+import { kycApp } from '../src/kyc/server';
 import {
   ALL_SEED_SSNS,
   APPROVER,
@@ -246,7 +247,8 @@ describe('SSNs never leave the server unmasked', () => {
 
 describe('home', () => {
   it('counts what each person can act on and spotlights it', async () => {
-    const { as } = setup();
+    // Only the KYC app is mounted, so Home's totals are KYC's alone.
+    const { as } = setup([kycApp]);
     const actionable = async (user: string) =>
       ((await as(user).get('/apps/kyc/cases')).body.rows as Array<{ actions: { approve: { allowed: boolean } } }>).filter((r) => r.actions.approve.allowed).length;
     const people = [APPROVER, APPROVER_2, OPERATOR, OBSERVER];

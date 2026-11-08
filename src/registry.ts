@@ -30,6 +30,13 @@ export const APPS: AppDefinition[] = [
     icon: 'identity',
     description: 'Identity checks to clear. High-risk cases need an Approver.',
   },
+  {
+    id: 'refunds',
+    name: 'Refunds Dashboard',
+    route: '/refunds',
+    icon: 'wallet',
+    description: 'Refund requests. $1,000 or less is approved right away; more needs an Approver.',
+  },
 ];
 
 export function findApp(id: string): AppDefinition | undefined {
