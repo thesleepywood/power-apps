@@ -19,7 +19,7 @@ Use this when asked to add an app (e.g. the Refunds Dashboard) to `thesleepywood
 3. **Mask sensitive data before it leaves the server.** Use `ssnForViewer(ssn, viewer)` in the view function. Make the collection's `redact` fully mask the SSN (`maskSsn(ssn, 'full')`) so the change log never holds a usable value. Free-text notes are scrubbed by the approvals primitives (`scrubSsns`); scrub any other free text yourself.
 4. **No self-approval at any step.** `canDecide` blocks the requester. Don't add rules that could leave a record with nobody able to decide it. Only users outside `escalatedRoles` may escalate (`mustEscalate`), and an approval by someone in `escalatedRoles` is final.
 5. **Only foundation UI pieces** from `src/foundation/client/ui`: `DataTable`, `StatusBadge`, `Badge`, `RecordPage`, `FieldList`, `ActionBar`, `ConfirmDialog`, `ChangeHistory`, `EmptyState`, `ErrorState`, `LoadingState`, `PageHeader`, `Tabs` and `Card`. No new design system.
-6. **Don't edit `permissions.ts`, `masking.ts`, `changeLog.ts`, `foundation.ts` or `AppShell.tsx`** unless the user asks. Keep changes to the foundation generic (as with `escalatedRoles`), and confirm the change is needed before making it.
+6. **Don't edit `permissions.ts`, `masking.ts`, `changeLog.ts`, `foundation.ts` or `AppShell.tsx`** unless the user asks. Keep changes to the foundation generic (as with `escalatedRoles`), and confirm the change is needed before making it. Run the **foundation diff check** below before every PR.
 7. In-memory and fictional only: no database, no real sign-in, no external services. Seed SSNs use the never-issued 9xx range.
 
 ## Files to create (mirror `src/kyc/`)
@@ -71,8 +71,33 @@ Add the seed SSNs to `ALL_SEED_SSNS` and named record-id constants to `helpers.t
 - Home: `waitingOnYou` matches the count of rows with `actions.approve.allowed`, and the spotlight points at the app.
 If the global change log now holds more seed history, update existing tests that count it (filter with `?app=`).
 
+## Foundation diff check (run before every PR)
+An app PR should touch `src/foundation/` as little as possible. From the repo root, run this to see exactly what changed relative to `main`, including uncommitted and untracked files:
+```bash
+git fetch -q origin
+BASE=$(git merge-base origin/main HEAD)
+PROTECTED='src/foundation/server/(permissions|masking|changeLog|foundation)\.ts|src/foundation/client/AppShell\.tsx'
+echo "== Foundation changes vs main =="; git diff --stat "$BASE" -- src/foundation; git status --short --untracked-files=all -- src/foundation
+{ git diff --name-only "$BASE" -- src/foundation; git ls-files --others --exclude-standard -- src/foundation; } \
+  | grep -E "^($PROTECTED)$" && echo "STOP: protected foundation file changed" || echo "OK: no protected foundation files changed"
+{ git diff "$BASE" -- src/foundation | grep -E '^\+[^+]'; git ls-files --others --exclude-standard -z -- src/foundation | xargs -0 -r cat; } \
+  | grep -inwE '<app-id>|kyc|refunds?' && echo "STOP: app-specific names in foundation code" || echo "OK: no app-specific names added"
+```
+Replace `<app-id>` with the new app's id and add any domain words (e.g. `refund`, `amount`).
+
+Rules for reading the result:
+- **Any `STOP` line:** revert the change, or get the user's explicit OK before keeping it. Protected files need the user's sign-off. App-specific names mean the logic belongs in `src/<app>/`, not the foundation.
+- **Every other changed foundation file** has to meet all of these:
+  1. **Necessary:** the app can't be built with the existing pieces.
+  2. **Generic:** new behaviour is an opt-in option with a default that keeps old behaviour (like `escalatedRoles`). No app ids or domain fields.
+  3. **Backwards compatible:** existing apps and tests pass unchanged. If you had to edit an existing test, say why in the PR.
+  4. **Tested on its own:** the primitive has a unit test in `tests/` (e.g. `tests/approvals.test.ts`), not just coverage through the app.
+  5. **Documented:** a **Foundation** section in the PR body lists each changed file with a one-line pseudo-diff and the reason. Update the README's foundation table if the API changed.
+- Small UI fixes (copy, CSS) are fine, but still list them in the PR body.
+- Paste the `--stat` output and the two `OK` lines into the test report.
+
 ## Before opening the PR
-1. Run `npm run check` and `npm run build`.
+1. Run `npm run check` and `npm run build`, then the **foundation diff check** above.
 2. Run `npm run demo` and screenshot the main flow for each role (queue, record, confirm dialog, denied action with its reason, Observer view, Home). Playwright over CDP at `http://localhost:29229` works; set `localStorage['keel.userId']` to switch person.
 3. Update `README.md`: the app list, the "What you can do" walkthrough, API endpoints and the tests list.
 4. The PR body follows the repo template. Include screenshots, a test report mapping each requirement to its tests, and any decision the spec left open (state your default).
