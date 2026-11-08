@@ -73,10 +73,14 @@ export function KycCaseRecord({ id, compact = false }: { id: string; compact?: b
     </div>
   );
 
-  const escalateNotice = c.approveEscalates && (
+  const escalateNotice = c.risk === 'high' && c.status === 'pending' && (
     <div className="notice notice-info">
       <RiskBadge risk="high" />
-      <span>Approving sends this case to <strong>Waiting for approver</strong>. Only an Approver can give final sign-off.</span>
+      {c.approveEscalates ? (
+        <span>Approving sends this case to <strong>Waiting for approver</strong>. Only an Approver can give final sign-off.</span>
+      ) : (
+        <span>High-risk case: an Approver's approval is the final sign-off.</span>
+      )}
     </div>
   );
 

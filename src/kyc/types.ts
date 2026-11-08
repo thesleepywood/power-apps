@@ -24,7 +24,7 @@ export interface KycCaseView {
   decidedBy: Person | null;
   decidedAt: string | null;
   decisionNote: string | null;
-  /** True when approving sends the case to an Approver instead of approving it. */
+  /** True when, for this viewer, approving sends the case to an Approver instead of approving it. */
   approveEscalates: boolean;
   /** The server's decision for the current viewer on each action. */
   actions: { approve: Decision; reject: Decision };

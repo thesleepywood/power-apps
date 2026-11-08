@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { canDecide, canEscalate, canWithdraw, decide, escalate, withdraw, type Approvable } from '../src/foundation/server/approvals';
+import { canDecide, canEscalate, canWithdraw, decide, escalate, mustEscalate, withdraw, type ApprovalOptions, type Approvable } from '../src/foundation/server/approvals';
 import type { Role } from '../src/foundation/shared/roles';
 import { Foundation } from '../src/foundation/server/foundation';
-import { findUser } from '../src/foundation/shared/users';
+import { findUser, USERS } from '../src/foundation/shared/users';
 import { APPROVER, APPROVER_2, NOW, OBSERVER, OPERATOR, OPERATOR_2 } from './helpers';
 
 const u = (id: string) => findUser(id)!;
@@ -82,7 +82,6 @@ describe('escalation (primitive)', () => {
   it('blocks self-approval at every step', () => {
     expect(canEscalate(u(OPERATOR), req(OPERATOR), opts)).toMatchObject({ code: 'self_approval' });
     expect(canDecide(u(APPROVER), { ...req(APPROVER, 'waiting'), escalatedBy: OPERATOR }, 'approved', opts)).toMatchObject({ code: 'self_approval' });
-    expect(canDecide(u(APPROVER), { ...req(OPERATOR, 'waiting'), escalatedBy: APPROVER }, 'approved', opts)).toMatchObject({ code: 'self_escalated' });
     const { f, col } = make();
     expect(() => escalate(f, u(OPERATOR), col, 'r1', {}, opts)).toThrow("You can't approve your own request");
     expect(f.changeLog.size).toBe(1);
@@ -96,4 +95,53 @@ describe('escalation (primitive)', () => {
     expect(canDecide(u(APPROVER), req(OPERATOR, 'rejected'), 'approved', opts)).toMatchObject({ code: 'not_pending' });
     expect(canEscalate(u(OBSERVER), req(OPERATOR), opts)).toMatchObject({ code: 'read_only' });
   });
+});
+
+describe('no stuck records', () => {
+  const opts: ApprovalOptions = { approverRoles: ['operator', 'approver'], escalatedRoles: ['approver'] };
+
+  it('Approvers give the final sign-off directly instead of escalating', () => {
+    expect(mustEscalate(u(OPERATOR), opts)).toBe(true);
+    expect(mustEscalate(u(APPROVER), opts)).toBe(false);
+    expect(canEscalate(u(APPROVER), req(OPERATOR), opts)).toMatchObject({ allowed: false, code: 'decide_directly' });
+  });
+
+  it('two Approvers: an Approver-opened record approved by the other Approver is finished, not stranded', () => {
+    const f = new Foundation(() => NOW);
+    const col = f.collection<Approvable>({ app: 't', recordType: 'R', label: (r) => r.id, redact: (r) => ({ ...r }) });
+    f.change(u(APPROVER), col, { action: 'created', summary: 'Opened', apply: () => req(APPROVER) });
+    expect(() => escalate(f, u(APPROVER_2), col, 'r1', {}, opts)).toThrow('approve it directly');
+    expect(decide(f, u(APPROVER_2), col, 'r1', { decision: 'approved' }, opts).status).toBe('approved');
+  });
+
+  // Every requester × every first approver × both option sets: after the first approval
+  // (escalate or decide, whichever the actor may do), an open record always has someone
+  // who can approve it and someone who can reject it.
+  for (const [label, options] of [['widened (KYC)', opts], ['default', {}]] as const) {
+    it(`a waiting record always has an eligible decider (${label} options)`, () => {
+      let waitingSeen = 0;
+      for (const requester of USERS.filter((x) => x.role !== 'observer')) {
+        for (const actor of USERS) {
+          const f = new Foundation(() => NOW);
+          const col = f.collection<Approvable>({ app: 't', recordType: 'R', label: (r) => r.id, redact: (r) => ({ ...r }) });
+          f.change(requester, col, { action: 'created', summary: 'Opened', apply: () => req(requester.id) });
+          const record = col.get('r1')!;
+          if (mustEscalate(actor, options)) {
+            if (!canEscalate(actor, record, options).allowed) continue;
+            escalate(f, actor, col, 'r1', {}, options);
+          } else {
+            if (!canDecide(actor, record, 'approved', options).allowed) continue;
+            decide(f, actor, col, 'r1', { decision: 'approved' }, options);
+          }
+          const after = col.get('r1')!;
+          if (after.status !== 'waiting') continue;
+          waitingSeen++;
+          for (const decision of ['approved', 'rejected'] as const) {
+            expect(USERS.some((x) => canDecide(x, after, decision, options).allowed), `${requester.id} → ${actor.id} → ${decision}`).toBe(true);
+          }
+        }
+      }
+      if (label !== 'default') expect(waitingSeen).toBeGreaterThan(0);
+    });
+  }
 });

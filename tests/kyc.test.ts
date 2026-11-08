@@ -65,15 +65,36 @@ describe('high-risk escalation', () => {
     expect(history.map((e: { action: string }) => e.action)).toEqual(['approved', 'waiting', 'created']);
   });
 
-  it('an Approver approving a pending high-risk case also escalates it, and must leave final sign-off to another Approver', async () => {
-    const { as } = setup();
-    const first = await as(APPROVER).post(casePath(KYC_HIGH_PENDING, 'approve'));
-    expect(first.body.status).toBe('waiting');
-    expect(first.body.actions.approve).toMatchObject({ allowed: false, code: 'self_escalated' });
-    const again = await as(APPROVER).post(casePath(KYC_HIGH_PENDING, 'approve'));
-    expect(again.status).toBe(403);
-    expect(again.body.error.code).toBe('self_escalated');
-    expect((await as(APPROVER_2).post(casePath(KYC_HIGH_PENDING, 'approve'))).body.status).toBe('approved');
+  it("an Approver's approval of a pending high-risk case is the final sign-off", async () => {
+    const { as, foundation } = setup();
+    const before = foundation.changeLog.size;
+    const view = (await as(APPROVER).get(casePath(KYC_HIGH_PENDING))).body;
+    expect(view).toMatchObject({ approveEscalates: false, actions: { approve: { allowed: true } } });
+    const res = await as(APPROVER).post(casePath(KYC_HIGH_PENDING, 'approve'));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'approved', decidedBy: { id: APPROVER }, escalatedBy: null });
+    expect(foundation.changeLog.size).toBe(before + 1);
+  });
+
+  it('no open case gets stuck: after any allowed approval, someone can still finish it', async () => {
+    const people = [OPERATOR, OPERATOR_2, APPROVER, APPROVER_2, OBSERVER];
+    const open = SEED_CASES.filter((c) => !c.outcome).map((c) => c.id);
+    for (const id of open) {
+      for (const actor of people) {
+        const { as } = setup();
+        if (!(await as(actor).get(casePath(id))).body.actions.approve.allowed) continue;
+        const after = (await as(actor).post(casePath(id, 'approve'))).body;
+        if (after.status === 'approved') continue;
+        expect(after.status).toBe('waiting');
+        const views = await Promise.all(people.map(async (p) => (await as(p).get(casePath(id))).body.actions));
+        expect(views.some((a) => a.approve.allowed), `${id} after ${actor}: approve`).toBe(true);
+        expect(views.some((a) => a.reject.allowed), `${id} after ${actor}: reject`).toBe(true);
+      }
+      // Cases already waiting in the seed can be finished too.
+      const { as } = setup();
+      const views = await Promise.all(people.map(async (p) => (await as(p).get(casePath(id))).body.actions));
+      expect(views.some((a) => a.approve.allowed), `${id} as seeded`).toBe(true);
+    }
   });
 
   it('a waiting case can be approved or rejected only by an Approver who did not open it', async () => {

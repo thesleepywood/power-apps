@@ -34,13 +34,22 @@ export interface ApprovalOptions {
   escalatedRoles?: Role[];
 }
 
+const escalatedRoles = (options: ApprovalOptions) => options.escalatedRoles ?? ['approver'];
+
+/**
+ * Does `user` have to send a record on for final sign-off, or can they give it themselves?
+ * Only people outside `escalatedRoles` escalate, so whoever escalated a record is never
+ * one of the people who must decide it — a waiting record can always be finished by
+ * anyone in `escalatedRoles` except its requester.
+ */
+export const mustEscalate = (user: User, options: ApprovalOptions = {}) => !requireRole(user, escalatedRoles(options)).allowed;
+
 const already = (status: ApprovalStatus) =>
   deny('not_pending', status === 'waiting' ? 'This request is already waiting for an Approver' : `This request is already ${status}`);
 
 /**
- * May `user` approve/reject `record`? Invariants: a person can never decide on
- * a request they opened themselves, regardless of role; and whoever escalated
- * a record can't also give its final sign-off.
+ * May `user` approve/reject `record`? Invariant: a person can never decide on
+ * a request they opened themselves, regardless of role.
  */
 export function canDecide(
   user: User,
@@ -50,7 +59,7 @@ export function canDecide(
 ): Decision {
   const waiting = record.status === 'waiting';
   return firstDenial(
-    () => requireRole(user, waiting ? (options.escalatedRoles ?? ['approver']) : (options.approverRoles ?? ['approver'])),
+    () => requireRole(user, waiting ? escalatedRoles(options) : (options.approverRoles ?? ['approver'])),
     () => (isOpen(record) ? allow() : already(record.status)),
     () =>
       record.requestedBy === user.id
@@ -61,18 +70,18 @@ export function canDecide(
               : "You can't reject your own request",
           )
         : allow(),
-    () =>
-      waiting && record.escalatedBy === user.id
-        ? deny('self_escalated', 'You escalated this, so another Approver has to sign off')
-        : allow(),
   );
 }
 
-/** May `user` approve a pending record by escalating it for an Approver's final sign-off? */
+/**
+ * May `user` approve a pending record by escalating it for final sign-off?
+ * People who could give the final sign-off themselves decide instead (see `mustEscalate`).
+ */
 export function canEscalate(user: User, record: Approvable, options: ApprovalOptions = {}): Decision {
   return firstDenial(
     () => canDecide(user, record, 'approved', options),
     () => (record.status === 'pending' ? allow() : already(record.status)),
+    () => (mustEscalate(user, options) ? allow() : deny('decide_directly', 'You can give the final sign-off, so approve it directly')),
   );
 }
 

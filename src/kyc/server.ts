@@ -102,7 +102,7 @@ export const kycApp: ServerAppFactory = (foundation) => {
     const user = currentUser(res);
     const note = typeof req.body?.note === 'string' ? req.body.note : undefined;
     const current = cases.require(req.params.id);
-    const updated = approveEscalates(current)
+    const updated = approveEscalates(current, user)
       ? escalate(foundation, user, cases, current.id, { note, summary: 'Approved — sent to an Approver' }, KYC_APPROVAL)
       : decide(foundation, user, cases, current.id, { decision: 'approved', note }, KYC_APPROVAL);
     res.json(kycCaseOf(updated, user));
