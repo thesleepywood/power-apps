@@ -58,7 +58,9 @@ Errors: `invalid(msg)` (400), `notFound` via `collection.require` (404), and `en
 ## Approvals primitive cheat sheet (`src/foundation/server/approvals.ts`)
 - Statuses: `pending | waiting | approved | rejected | withdrawn`. `StatusBadge` already labels them; `waiting` shows as "Waiting for approver".
 - `ApprovalOptions = { approverRoles?, escalatedRoles? }`. Both default to `['approver']`. `approverRoles` decides pending records; `escalatedRoles` decides waiting ones.
-- `canDecide`, `canEscalate`, `canWithdraw` and `mustEscalate` return `Decision`s for `actions`. `decide`, `escalate` and `withdraw` perform the change (enforced, 1 log entry).
+- `canDecide`, `canEscalate` and `canWithdraw` return `Decision`s, which you put in `actions`.
+- `mustEscalate(user, options)` returns a **boolean**: `true` when the user is outside `escalatedRoles`, so they can't give the final sign-off. It decides whether an approval goes through `escalate()`/`canEscalate` or `decide()`/`canDecide` (see `approveEscalates` in `src/kyc/view.ts`). Never put it in `actions` directly.
+- `decide`, `escalate` and `withdraw` perform the change (enforced, 1 log entry).
 
 ## Tests (in `tests/`, using `setup()` and `as(userId)` from `tests/helpers.ts`)
 Add the seed SSNs to `ALL_SEED_SSNS` and named record-id constants to `helpers.ts`. Users: `OPERATOR` (u-maya), `OPERATOR_2` (u-diego), `APPROVER` (u-priya), `APPROVER_2` (u-samuel), `OBSERVER` (u-grace). Cover at least the following (see `tests/kyc.test.ts`):
